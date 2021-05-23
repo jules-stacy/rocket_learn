@@ -1,5 +1,14 @@
+from rlgym.utils import reward_functions
+from rlgym.utils.reward_functions import combined_reward
+from rlgym.utils.terminal_conditions.common_conditions import GoalScoredCondition, TimeoutCondition
+from rlgym.utils.reward_functions.common_rewards import TouchBallReward
+from rlgym.utils.reward_functions.shoot_ball_reward import ShootBallReward
+from rlgym.utils.reward_functions.combined_reward import CombinedReward
+from cust_reward import GoalReward
+
+
 import rlgym
-import time
+# import time
 
 import numpy as np
 import torch
@@ -8,8 +17,8 @@ import os
 
 import agent_utils
 import TD3
-import OurDDPG
-import DDPG
+# import OurDDPG
+# import DDPG
 
 
 #setup name == main
@@ -48,8 +57,29 @@ if __name__ == "__main__":
     if args.save_model and not os.path.exists("./models"):
         os.makedirs("./models")
 
+
+    # set episode timeout
+    # 1800 sec = 30 min
+    default_tick_skip = 8
+    physics_ticks_per_second = 120
+    ep_len_seconds = 1800
+    max_steps = int(round(ep_len_seconds * physics_ticks_per_second / default_tick_skip))
+
+    # specify terminal conditions from commons
+    term_cond1 = TimeoutCondition(max_steps)
+    term_cond2 = GoalScoredCondition()
+
+    # specify reward functions
+    
+    goal_reward = ShootBallReward()
+    touch_reward = TouchBallReward()
+
+    all_rewards = CombinedReward(reward_functions=(goal_reward, touch_reward), reward_weights=(1.0,1.0))
+    
+    
+    
     #create the environment
-    env = rlgym.make(env_name=args.env, spawn_opponents=args.opponents, team_size=args.team_size, ep_len_minutes=args.ep_len) #make the environment
+    env = rlgym.make(env_name=args.env, spawn_opponents=args.opponents, team_size=args.team_size, ep_len_minutes=args.ep_len, terminal_conditions=[term_cond2], reward_fn=all_rewards) #make the environment | 
 
     #set seeds
     torch.manual_seed(args.seed)
@@ -113,7 +143,7 @@ if __name__ == "__main__":
             episode_timesteps += 1
             
             # Select action randomly or according to policy
-            if episode_timesteps < args.start_timesteps:
+            if t < args.start_timesteps:
                 action1 = env.action_space.sample()
                 action2 = env.action_space.sample()
             else:  # Select the action according to policy, with gaussian noise added
@@ -145,7 +175,7 @@ if __name__ == "__main__":
             episode_reward2 += reward[1]
 
             # Train agent after collecting sufficient data
-            if episode_timesteps >= args.start_timesteps:
+            if t >= args.start_timesteps:
                 policy.train(replay_buffer, args.batch_size)
 
         print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Blue Rwrd: {episode_reward1:.3f} Red Rwrd: {episode_reward2:.3f}")
